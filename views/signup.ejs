@@ -31,8 +31,14 @@
               <div class="panel-title">Sign Up</div>
             </div>
             <div class="panel-body">
+              <!-- display registration status -->
+
+              <% if (msg!=='') { %>
+              <p style="text-align: center"><%= msg %></p>
+              <% } %>
+
               <form
-                action="/"
+                action="/signup"
                 id="SignUpForm"
                 class="form-horizontal"
                 method="post"
@@ -48,6 +54,7 @@
                       class="form-control"
                       name="uname"
                       placeholder="Enter Your User Name"
+                      required
                     />
                   </div>
                 </div>
@@ -58,10 +65,11 @@
                   >
                   <div class="col-md-9">
                     <input
-                      type="text"
+                      type="email"
                       class="form-control"
                       name="email"
                       placeholder="Enter Your Email"
+                      required
                     />
                   </div>
                 </div>
@@ -76,6 +84,7 @@
                       class="form-control"
                       name="password"
                       placeholder="Enter your password"
+                      required
                     />
                   </div>
                 </div>
@@ -90,6 +99,7 @@
                       class="form-control"
                       name="confpassword"
                       placeholder="Confirm your password"
+                      required
                     />
                   </div>
                 </div>
@@ -107,8 +117,8 @@
                 </div>
 
                 <p>
-                    Already Have an account?
-                    <a href="/">Login Here</a>
+                  Already Have an account?
+                  <a href="/">Login Here</a>
                 </p>
               </form>
             </div>
