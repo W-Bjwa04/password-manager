@@ -2,7 +2,14 @@ var express = require("express");
 var router = express.Router();
 const userModel = require("../modules/user");
 const bodyParser = require("body-parser");
-const bcrypt = require('bcryptjs')  // for password encryption
+const bcrypt = require("bcryptjs"); // for password encryption
+const jwt = require("jsonwebtoken");
+
+// set up the node local storage for authetication
+if (typeof localStorage === "undefined" || localStorage === null) {
+  var LocalStorage = require("node-localstorage").LocalStorage;
+  localStorage = new LocalStorage("./scratch");
+}
 
 // parse application/x-www-form-urlencoded
 router.use(bodyParser.urlencoded({ extended: false }));
@@ -53,9 +60,67 @@ const validateEmail = async function (req, res, next) {
 
   next();
 };
+
+//middleware to check the user is login or not for every route
+
+function validateLogin(req, res, next) {
+  //get the jwt token from the database
+  const token = localStorage.getItem("userToken");
+
+  try {
+    jwt.verify(token, "secret-key");
+  } catch (error) {
+    return res.redirect("/");
+  }
+  next();
+}
+
 /* GET login page. */
 router.get("/", function (req, res, next) {
-  res.render("index", { title: "Welcome To The Password Manager" });
+  res.render("index", { title: "Welcome To The Password Manager", msg: "" });
+});
+
+// handle the post request on the login page
+router.post("/", async (req, res) => {
+  // get the data from login form
+  const username = req.body.uname;
+  const password = req.body.password;
+
+  // validate the username from the database
+  try {
+    const response = await userModel.findOne({ username: username });
+    // if username is found
+    // get the user id from db
+    const userId = response._id;
+    console.log(userId);
+
+    // check the password for that user
+    const dbPassword = response.password;
+    //return true if password is matched
+    // becuase password from db is in encrypted form
+    if (bcrypt.compareSync(password, dbPassword)) {
+      // generate the json web token for authetication
+
+      const token = jwt.sign({ userId: userId }, "secret-key");
+
+      // save this token to the local storage
+      localStorage.setItem("userToken", token);
+      // save the username to display the current login user
+      localStorage.setItem("currentUser", `${username}`);
+      // after login redirect the dashboard page
+      res.redirect("/dashboard");
+    } else {
+      res.render("index", {
+        title: "Welcome To The Password Manager",
+        msg: "Wrong Password",
+      });
+    }
+  } catch (error) {
+    res.render("index", {
+      title: "Welcome To The Password Manager",
+      msg: "Invalid Username",
+    });
+  }
 });
 
 // get the sign up page
@@ -80,9 +145,8 @@ router.post("/signup", validateUsername, validateEmail, (req, res) => {
       msg: "Password Not Matched",
     });
   } else {
-
     // encrypt the password before storing in database
-    password = bcrypt.hashSync(req.body.password,10)
+    password = bcrypt.hashSync(req.body.password, 10);
     //create a new user on provided details
 
     const newUser = new userModel({
@@ -105,27 +169,50 @@ router.post("/signup", validateUsername, validateEmail, (req, res) => {
 
 // get the password category page
 
-router.get("/passwordCategory", (req, res) => {
+router.get("/passwordCategory",validateLogin, (req, res) => {
   res.render("password_category", { title: "Password Category List" });
 });
 
 // get the add new category page
 
-router.get("/add-new-category", (req, res) => {
+router.get("/add-new-category", validateLogin,(req, res) => {
   res.render("add-new-category", { title: "Add new category" });
 });
 
 // get the add new password page
 
-router.get("/add-new-password", (req, res) => {
+router.get("/add-new-password",validateLogin, (req, res) => {
   res.render("add-new-password", { title: "Add New Password" });
 });
 
 // get the view all passwords page
 
-router.get("/view-all-password", (req, res) => {
+router.get("/view-all-password", validateLogin,(req, res) => {
   res.render("view-all-password", { title: "Password Details List" });
 });
+
+//get the dashboard page
+
+router.get("/dashboard",validateLogin, (req, res) => {
+  let currUser = localStorage.getItem("currentUser");
+
+  if (!currUser) {
+    currUser = "Guest";
+  }
+  res.render("dashboard", {
+    currentUser: currUser,
+    title: "Dashboard",
+  });
+});
+
+// handle the logout page
+
+router.get("/logout", (req, res) => {
+  // remove the assigned token form local storage
+  localStorage.removeItem("userToken");
+  //remove the current user from local storage
+  localStorage.removeItem("currentUser");
+  // redirect the login page
+  res.redirect("/");
+});
 module.exports = router;
-
-
