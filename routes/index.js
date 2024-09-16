@@ -4,6 +4,24 @@ const userModel = require("../modules/user");
 const bodyParser = require("body-parser");
 const bcrypt = require("bcryptjs"); // for password encryption
 const jwt = require("jsonwebtoken");
+const { body, validationResult } = require("express-validator");
+const passCatModel = require("../modules/password_category");
+
+// for temprary store the message to send through the redirecting 
+
+const session = require('express-session');
+const flash = require('connect-flash');
+
+
+// Set up session middleware
+router.use(session({
+  secret: 'your-secret-key', // Replace with a strong secret key
+  resave: false,
+  saveUninitialized: true
+}));
+
+// Set up flash middleware
+router.use(flash());
 
 // set up the node local storage for authetication
 if (typeof localStorage === "undefined" || localStorage === null) {
@@ -72,6 +90,35 @@ function validateLogin(req, res, next) {
   } catch (error) {
     return res.redirect("/");
   }
+  next();
+}
+
+//middleware to check whether the password category exits in the database or not
+
+async function validatePasswordCategory(req, res, next) {
+  // get the password category
+  const passCatg = req.body.newcatg;
+
+  // find the catg from db
+  try {
+    const response = await passCatModel.findOne({
+      password_category: passCatg,
+    });
+
+    // if the category is found in database
+    if (response) {
+      let currUser = localStorage.getItem("currentUser");
+      return res.render("add-new-category", {
+        title: "Add new category",
+        currUser: currUser,
+        error: null,
+        msg: "Password Category Exits Already",
+      });
+    }
+  } catch (error) {
+    throw error;
+  }
+
   next();
 }
 
@@ -169,36 +216,145 @@ router.post("/signup", validateUsername, validateEmail, (req, res) => {
 
 // get the password category page
 
-router.get("/passwordCategory",validateLogin, (req, res) => {
-  res.render("password_category", { title: "Password Category List" });
+router.get("/passwordCategory", validateLogin, async (req, res) => {
+  try {
+    // Retrieve flash messages
+    const message = req.flash('msg');
+    let currUser = localStorage.getItem("currentUser");
+    const data = await passCatModel.find({}).exec();
+    res.render("password_category", {
+      title: "Password Category List",
+      data: data,
+      currUser: currUser,
+      msg: message,
+    });
+  } catch (error) {
+    throw error;
+  }
 });
+
+// handle the delete password category route
+
+router.get("/passwordCategory/delete/:id", async (req, res) => {
+  let currUser = localStorage.getItem("currentUser");
+  // get the object id of the category to be deleted
+  const objectId = req.params.id;
+  // delete with object from dataabase
+  try {
+    await passCatModel.findByIdAndDelete(objectId).exec();
+    const data = await passCatModel.find({}).exec();
+    // Store success message in flash
+    req.flash('msg', 'Password Category Deleted Successfully');
+    res.redirect('/passwordCategory')
+  } catch (error) {
+    throw error;
+  }
+});
+
+
+//handle the edit password category route 
+
+router.get("/passwordCategory/edit/:id",async (req,res)=>{
+  try {
+    // get the object id 
+    const objectId = req.params.id
+    const object = await passCatModel.findById(objectId).exec()
+   
+    
+    res.render('edit_password_category',{objId:objectId,object:object,title:"Edit Password Category"})
+  } catch (error) {
+    throw error
+  }
+})
+
+//handle the new upadated password category
+router.post('/passwordCategory/edit/:id',async (req,res)=>{
+  try {
+    const objectId = req.params.id
+    console.log(objectId)
+    await passCatModel.findByIdAndUpdate(objectId,{
+      password_category:req.body.editcatg,
+    },{new:true}).exec()
+    req.flash('msg', 'Password Category Updated Successfully');
+    res.redirect('/passwordCategory')
+  } catch (error) {
+      throw error
+  }
+ 
+})
 
 // get the add new category page
 
-router.get("/add-new-category", validateLogin,(req, res) => {
-  res.render("add-new-category", { title: "Add new category" });
+router.get("/add-new-category", validateLogin, (req, res) => {
+  let currUser = localStorage.getItem("currentUser");
+  res.render("add-new-category", {
+    title: "Add new category",
+    currUser: currUser,
+    error: null,
+    msg: "",
+  });
 });
+
+// handle the post request on add new category
+router.post(
+  "/add-new-category",
+  validateLogin,
+  validatePasswordCategory,
+  [
+    // Validate and sanitize the newcatg field
+    body("newcatg")
+      .isLength({ min: 1 })
+      .withMessage("Enter a password category")
+      .trim()
+      .escape(),
+  ],
+  async (req, res) => {
+    let currUser = localStorage.getItem("currentUser");
+    // Handle the validation results
+    const errors = validationResult(req);
+    if (errors.isEmpty()) {
+      // add the password category to the database
+      try {
+        await new passCatModel({
+          password_category: req.body.newcatg,
+        }).save();
+        res.render("add-new-category", {
+          title: "Add new category",
+          currUser: currUser,
+          error: null,
+          msg: "Password Category Added Successfully",
+        });
+      } catch (error) {
+        throw error;
+      }
+    } else {
+      // if the user does not enter the data
+      res.render("add-new-category", {
+        title: "Add new category",
+        currUser: currUser,
+        error: errors,
+        msg: "",
+      });
+    }
+  }
+);
 
 // get the add new password page
 
-router.get("/add-new-password",validateLogin, (req, res) => {
+router.get("/add-new-password", validateLogin, (req, res) => {
   res.render("add-new-password", { title: "Add New Password" });
 });
 
 // get the view all passwords page
 
-router.get("/view-all-password", validateLogin,(req, res) => {
+router.get("/view-all-password", validateLogin, (req, res) => {
   res.render("view-all-password", { title: "Password Details List" });
 });
 
 //get the dashboard page
 
-router.get("/dashboard",validateLogin, (req, res) => {
+router.get("/dashboard", validateLogin, (req, res) => {
   let currUser = localStorage.getItem("currentUser");
-
-  if (!currUser) {
-    currUser = "Guest";
-  }
   res.render("dashboard", {
     currentUser: currUser,
     title: "Dashboard",

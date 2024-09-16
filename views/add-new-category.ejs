@@ -37,7 +37,7 @@
                 </ul></li>
                 <li><a href="/logout">Logout</a></li>
           </ul>
-          <div class="navbar-header" style="float: right;"> <a class="navbar-brand" href="#">Loggedin As:</a></div>
+          <div class="navbar-header" style="float: right;"> <a class="navbar-brand" href="#">Loggedin As: <%= currUser %> </a></div>
         </div>
       </nav>
 
@@ -58,8 +58,25 @@
                 <div class="panel-title">Add New Category</div>
               </div>
               <div class="panel-body">
+                <!-- alert if user enter no category  -->
+
+              <% if (!((error == null))) { %>
+                <div class="alert alert-danger" role="alert">
+                  <p style="text-align: center"><%= error.errors[0]['msg']%></p>
+                </div>
+                <% } %>
+
+
+                <!-- alert if the category is added or not  -->
+
+              <% if (msg!=='') { %>
+                <div class="alert alert-success" role="alert">
+                  <p style="text-align: center"><%= msg %></p>
+                </div>
+                <% } %>
+
                 <form
-                  action="/"
+                  action="/add-new-category"
                   id="AddNewCategoryForm"
                   class="form-horizontal"
                   method="post"
