@@ -6,19 +6,21 @@ const bcrypt = require("bcryptjs"); // for password encryption
 const jwt = require("jsonwebtoken");
 const { body, validationResult } = require("express-validator");
 const passCatModel = require("../modules/password_category");
+const passDescModel = require("../modules/password_desc");
 
-// for temprary store the message to send through the redirecting 
+// for temprary store the message to send through the redirecting
 
-const session = require('express-session');
-const flash = require('connect-flash');
-
+const session = require("express-session");
+const flash = require("connect-flash");
 
 // Set up session middleware
-router.use(session({
-  secret: 'your-secret-key', // Replace with a strong secret key
-  resave: false,
-  saveUninitialized: true
-}));
+router.use(
+  session({
+    secret: "your-secret-key", // Replace with a strong secret key
+    resave: false,
+    saveUninitialized: true,
+  })
+);
 
 // Set up flash middleware
 router.use(flash());
@@ -79,6 +81,27 @@ const validateEmail = async function (req, res, next) {
   next();
 };
 
+//middleware to check whether the password project is exits in the database or not 
+
+const validateProjectName = async function(req,res,next){
+  // get the username
+  const projectName = req.body.projectname;
+
+  try {
+      const response = await passDescModel.findOne({project_name:projectName})
+
+      // if the project name is found 
+      if(response){
+        // Store success message in flash
+        req.flash("msg", "Project Name Exits Already");
+        return res.redirect('/view-all-password')
+      }
+  } catch (error) {
+    throw error
+  }
+  next()
+}
+
 //middleware to check the user is login or not for every route
 
 function validateLogin(req, res, next) {
@@ -124,7 +147,12 @@ async function validatePasswordCategory(req, res, next) {
 
 /* GET login page. */
 router.get("/", function (req, res, next) {
-  res.render("index", { title: "Welcome To The Password Manager", msg: "" });
+  const loginToken = localStorage.getItem("userToken");
+  if (loginToken) {
+    res.redirect("/dashboard");
+  } else {
+    res.render("index", { title: "Welcome To The Password Manager", msg: "" });
+  }
 });
 
 // handle the post request on the login page
@@ -173,7 +201,12 @@ router.post("/", async (req, res) => {
 // get the sign up page
 
 router.get("/signup", (req, res) => {
-  res.render("signup", { title: "Welcome To The Password Manager", msg: "" });
+  const loginToken = localStorage.getItem("userToken");
+  if (loginToken) {
+    res.redirect("/dashboard");
+  } else {
+    res.render("signup", { title: "Welcome To The Password Manager", msg: "" });
+  }
 });
 
 // hanlde the post request on the sign up page
@@ -219,7 +252,7 @@ router.post("/signup", validateUsername, validateEmail, (req, res) => {
 router.get("/passwordCategory", validateLogin, async (req, res) => {
   try {
     // Retrieve flash messages
-    const message = req.flash('msg');
+    const message = req.flash("msg");
     let currUser = localStorage.getItem("currentUser");
     const data = await passCatModel.find({}).exec();
     res.render("password_category", {
@@ -244,44 +277,49 @@ router.get("/passwordCategory/delete/:id", async (req, res) => {
     await passCatModel.findByIdAndDelete(objectId).exec();
     const data = await passCatModel.find({}).exec();
     // Store success message in flash
-    req.flash('msg', 'Password Category Deleted Successfully');
-    res.redirect('/passwordCategory')
+    req.flash("msg", "Password Category Deleted Successfully");
+    res.redirect("/passwordCategory");
   } catch (error) {
     throw error;
   }
 });
 
+//handle the edit password category route
 
-//handle the edit password category route 
-
-router.get("/passwordCategory/edit/:id",async (req,res)=>{
+router.get("/passwordCategory/edit/:id", async (req, res) => {
   try {
-    // get the object id 
-    const objectId = req.params.id
-    const object = await passCatModel.findById(objectId).exec()
-   
-    
-    res.render('edit_password_category',{objId:objectId,object:object,title:"Edit Password Category"})
+    // get the object id
+    const objectId = req.params.id;
+    const object = await passCatModel.findById(objectId).exec();
+    res.render("edit_password_category", {
+      objId: objectId,
+      object: object,
+      title: "Edit Password Category",
+    });
   } catch (error) {
-    throw error
+    throw error;
   }
-})
+});
 
 //handle the new upadated password category
-router.post('/passwordCategory/edit/:id',async (req,res)=>{
+router.post("/passwordCategory/edit/:id", async (req, res) => {
   try {
-    const objectId = req.params.id
-    console.log(objectId)
-    await passCatModel.findByIdAndUpdate(objectId,{
-      password_category:req.body.editcatg,
-    },{new:true}).exec()
-    req.flash('msg', 'Password Category Updated Successfully');
-    res.redirect('/passwordCategory')
+    const objectId = req.params.id;
+    await passCatModel
+      .findByIdAndUpdate(
+        objectId,
+        {
+          password_category: req.body.editcatg,
+        },
+        { new: true }
+      )
+      .exec();
+    req.flash("msg", "Password Category Updated Successfully");
+    res.redirect("/passwordCategory");
   } catch (error) {
-      throw error
+    throw error;
   }
- 
-})
+});
 
 // get the add new category page
 
@@ -341,14 +379,98 @@ router.post(
 
 // get the add new password page
 
-router.get("/add-new-password", validateLogin, (req, res) => {
-  res.render("add-new-password", { title: "Add New Password" });
+router.get("/add-new-password", validateLogin, async (req, res) => {
+  let currUser = localStorage.getItem("currentUser");
+  try {
+    const data = await passCatModel.find({}).exec();
+    res.render("add-new-password", {
+      title: "Add New Password",
+      currUser: currUser,
+      data: data,
+      error:null,
+      msg: "",
+    });
+  } catch (error) {
+    throw error;
+  }
+});
+
+// handle the post request on the add new password page
+
+router.post("/add-new-password", validateLogin,validateProjectName,[
+  
+  // Validate selectedpasswordcategory field
+  body('selectedpasswordcategory')
+    .notEmpty()
+    .withMessage('Please select a password category')
+    .custom(value => {
+      if (value === 'Select Password Category') {
+        throw new Error('No password category is selected');
+      }
+      return true;
+    }),
+    // validate the project name 
+  body('newpassword')
+  .isLength({ min: 1 })
+  .withMessage('Enter a project name'),
+
+
+  // Validate newpassword field
+  body('newpassword')
+    .isLength({ min: 1 })
+    .withMessage('Enter a password category')
+],async (req, res) => {
+  let currUser = localStorage.getItem("currentUser");
+  // get the data entered by the user
+  const passCat = req.body.selectedpasswordcategory;
+  const projectName = req.body.projectname
+  const passDesc = req.body.newpassword;
+  const data = await passCatModel.find({}).exec();
+  // making the model on the password description and selected category
+// Handle the validation results
+ const errors = validationResult(req);
+ console.log(errors)
+ if(errors.isEmpty()){
+  try {
+    await new passDescModel({
+      password_category: passCat,
+      project_name:projectName,
+      password_desc: passDesc,
+    }).save();
+    
+    res.render("add-new-password", {
+      title: "Add New Password",
+      currUser: currUser,
+      data: data,
+      error:null,
+      msg: "Password Description Added Successfully",
+    });
+  } catch (error) {
+    throw error;
+  }
+ } else{
+  res.render("add-new-password", {
+    title: "Add New Password",
+    currUser: currUser,
+    data: data,
+    error:errors,
+    msg: "",
+  });
+ }
+  
 });
 
 // get the view all passwords page
 
-router.get("/view-all-password", validateLogin, (req, res) => {
-  res.render("view-all-password", { title: "Password Details List" });
+router.get("/view-all-password", validateLogin, async (req, res) => {
+  let currUser = localStorage.getItem("currentUser");
+  const message = req.flash("msg");
+  try {
+    const data = await passDescModel.find({}).exec()
+    res.render("view-all-password", { title: "Password Details List",data:data,currUser:currUser,msg:message});
+  } catch (error) {
+    throw error
+  }
 });
 
 //get the dashboard page
