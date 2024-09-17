@@ -410,7 +410,7 @@ router.post("/add-new-password", validateLogin,validateProjectName,[
       return true;
     }),
     // validate the project name 
-  body('newpassword')
+  body('projectname')
   .isLength({ min: 1 })
   .withMessage('Enter a project name'),
 
@@ -429,7 +429,7 @@ router.post("/add-new-password", validateLogin,validateProjectName,[
   // making the model on the password description and selected category
 // Handle the validation results
  const errors = validationResult(req);
- console.log(errors)
+
  if(errors.isEmpty()){
   try {
     await new passDescModel({
@@ -472,6 +472,83 @@ router.get("/view-all-password", validateLogin, async (req, res) => {
     throw error
   }
 });
+
+//handle the delete password description 
+
+router.get('/view-all-password/delete/:id',validateLogin,async (req,res)=>{
+  // get the id from the url 
+  const objectId = req.params.id
+
+  //find the object against this id from database and delete it 
+  try {
+    await passDescModel.findByIdAndDelete(objectId).exec()
+    req.flash("msg", "Password Description Deleted Successfully");
+    // redirect the view-all-password page again for refresh purpose 
+    res.redirect('/view-all-password')
+  } catch (error) {
+    throw error
+  }
+})
+
+//handle the edit password description route 
+
+router.get('/view-all-password/edit/:id',validateLogin,async (req,res)=>{
+  // get the object id from the request 
+  const objectId = req.params.id
+  try {
+     // find for that object in the database 
+     const objDb = await passDescModel.findById(objectId)
+     const passCatg = await passCatModel.find({}).exec()
+    res.render('update-password-desc',{title:"Edit Password",error:null,objDb:objDb,data:passCatg})
+  } catch (error) {
+    throw error
+  }
+ 
+})
+
+//handle the post request of the update password description 
+
+router.post('/view-all-password/edit/:id',validateLogin,[
+
+  // Validate newpassword field
+  body('newpassword')
+    .isLength({ min: 1 })
+    .withMessage('Enter the password description')
+],async (req,res)=>{
+  const objId = req.params.id
+  // get the data entered by the user
+  const passCat = req.body.selectedpasswordcategory;
+  const projectName = req.body.projectname
+  const passDesc = req.body.newpassword;
+
+  //upadate the record in the database 
+  // Handle the validation results
+  const errors = validationResult(req);
+
+  if(errors.isEmpty()){
+    
+    try {
+      await passDescModel.findByIdAndUpdate(objId,{
+        password_category: passCat,
+        project_name:projectName,
+        password_desc: passDesc,
+      }).exec()
+      req.flash("msg", "Password Description Updated Successfully");
+      // redirect the view-all-password page again for refresh purpose 
+      res.redirect('/view-all-password')
+    
+    } catch (error) {
+      throw error
+    }
+  } else{
+    // find for that object in the database 
+    const objDb = await passDescModel.findById(objId)
+    const passCatg = await passCatModel.find({}).exec()
+    res.render('update-password-desc',{title:"Edit Password",error:errors,objDb:objDb,data:passCatg})
+  }
+
+})
+
 
 //get the dashboard page
 
