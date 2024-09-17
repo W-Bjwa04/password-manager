@@ -268,7 +268,7 @@ router.get("/passwordCategory", validateLogin, async (req, res) => {
 
 // handle the delete password category route
 
-router.get("/passwordCategory/delete/:id", async (req, res) => {
+router.get("/passwordCategory/delete/:id", validateLogin,async (req, res) => {
   let currUser = localStorage.getItem("currentUser");
   // get the object id of the category to be deleted
   const objectId = req.params.id;
@@ -286,7 +286,7 @@ router.get("/passwordCategory/delete/:id", async (req, res) => {
 
 //handle the edit password category route
 
-router.get("/passwordCategory/edit/:id", async (req, res) => {
+router.get("/passwordCategory/edit/:id",validateLogin,async (req, res) => {
   try {
     // get the object id
     const objectId = req.params.id;
@@ -295,6 +295,7 @@ router.get("/passwordCategory/edit/:id", async (req, res) => {
       objId: objectId,
       object: object,
       title: "Edit Password Category",
+      error:null,
     });
   } catch (error) {
     throw error;
@@ -302,23 +303,47 @@ router.get("/passwordCategory/edit/:id", async (req, res) => {
 });
 
 //handle the new upadated password category
-router.post("/passwordCategory/edit/:id", async (req, res) => {
-  try {
+router.post("/passwordCategory/edit/:id", [
+  
+  // validate the category name 
+  body('editcatg')
+  .isLength({ min: 1 })
+  .withMessage('Enter a password category'),
+
+
+],validateLogin,async (req, res) => {
+
+  // Handle the validation results
+  const errors = validationResult(req);
+  if(errors.isEmpty()){
+    try {
+      const objectId = req.params.id;
+      await passCatModel
+        .findByIdAndUpdate(
+          objectId,
+          {
+            password_category: req.body.editcatg,
+          },
+          { new: true }
+        )
+        .exec();
+      req.flash("msg", "Password Category Updated Successfully");
+      res.redirect("/passwordCategory");
+    } catch (error) {
+      throw error;
+    }
+  } else{
+    // get the object id
     const objectId = req.params.id;
-    await passCatModel
-      .findByIdAndUpdate(
-        objectId,
-        {
-          password_category: req.body.editcatg,
-        },
-        { new: true }
-      )
-      .exec();
-    req.flash("msg", "Password Category Updated Successfully");
-    res.redirect("/passwordCategory");
-  } catch (error) {
-    throw error;
+    const object = await passCatModel.findById(objectId).exec();
+    res.render("edit_password_category", {
+      objId: objectId,
+      object: object,
+      title: "Edit Password Category",
+      error:errors
+    });
   }
+  
 });
 
 // get the add new category page
@@ -552,12 +577,23 @@ router.post('/view-all-password/edit/:id',validateLogin,[
 
 //get the dashboard page
 
-router.get("/dashboard", validateLogin, (req, res) => {
+router.get("/dashboard", validateLogin, async (req, res) => {
   let currUser = localStorage.getItem("currentUser");
-  res.render("dashboard", {
-    currentUser: currUser,
-    title: "Dashboard",
-  });
+  // calute the total passwrod categories and total password descriptions in database 
+
+  try {
+    const totalCategories = await passCatModel.countDocuments({}).exec()
+    const totalDesc = await passDescModel.countDocuments({}).exec()
+    res.render("dashboard", {
+      currentUser: currUser,
+      title: "Dashboard",
+      totalDesc:totalDesc,
+      totalCategories:totalCategories
+    });
+  } catch (error) {
+    throw error
+  }
+  
 });
 
 // handle the logout page
@@ -571,3 +607,5 @@ router.get("/logout", (req, res) => {
   res.redirect("/");
 });
 module.exports = router;
+
+
